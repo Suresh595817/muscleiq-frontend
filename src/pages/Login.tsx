@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Activity, ArrowRight, Mail, Lock, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Activity, ArrowRight, Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { PageTransition } from '../components/PageTransition';
 
@@ -9,10 +9,74 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initialize registered users list in localStorage if it doesn't exist
+  useEffect(() => {
+    const users = localStorage.getItem('muscleiq_users');
+    if (!users) {
+      const defaultUser = [{ email: 'athlete@example.com', password: 'password123', name: 'Athlete' }];
+      localStorage.setItem('muscleiq_users', JSON.stringify(defaultUser));
+    }
+  }, []);
+
+  const getRegisteredUsers = () => {
+    const users = localStorage.getItem('muscleiq_users');
+    if (users) {
+      try {
+        return JSON.parse(users);
+      } catch (e) {
+        return [{ email: 'athlete@example.com', password: 'password123', name: 'Athlete' }];
+      }
+    }
+    return [{ email: 'athlete@example.com', password: 'password123', name: 'Athlete' }];
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) login(email);
+    setError(null);
+
+    const users = getRegisteredUsers();
+    const emailLower = email.toLowerCase().trim();
+
+    if (isSignUp) {
+      // Sign Up Flow
+      if (users.some((u: any) => u.email.toLowerCase() === emailLower)) {
+        setError('This email is already registered.');
+        return;
+      }
+
+      const newUser = { name: name.trim(), email: emailLower, password };
+      users.push(newUser);
+      localStorage.setItem('muscleiq_users', JSON.stringify(users));
+
+      // Successfully sign up & log in
+      login(emailLower);
+    } else {
+      // Sign In Flow
+      const matchedUser = users.find((u: any) => u.email.toLowerCase() === emailLower);
+
+      if (!matchedUser) {
+        setError('Incorrect email address or user not found.');
+        return;
+      }
+
+      if (matchedUser.password !== password) {
+        setError('Incorrect password. Please try again.');
+        return;
+      }
+
+      // Success! Log in
+      login(emailLower);
+    }
+  };
+
+  const toggleMode = () => {
+    setIsSignUp(!isSignUp);
+    setError(null);
+    setEmail('');
+    setPassword('');
+    setName('');
   };
 
   return (
@@ -21,7 +85,7 @@ export const Login: React.FC = () => {
         {/* Background glow effect */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 bg-accent/20 rounded-full blur-[100px] -z-10" />
 
-        <div className="mb-12 text-center">
+        <div className="mb-8 text-center">
           <div className="w-16 h-16 bg-dark-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-glow border border-dark-300">
             <Activity className="w-8 h-8 text-accent" />
           </div>
@@ -34,6 +98,14 @@ export const Login: React.FC = () => {
               : 'AI-powered muscle imbalance detection.'}
           </p>
         </div>
+
+        {/* Error Alert Box */}
+        {error && (
+          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-3.5 text-sm mb-6 animate-pulse">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="font-medium text-left">{error}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSignUp && (
@@ -102,11 +174,12 @@ export const Login: React.FC = () => {
           {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
           <button
             type="button"
-            onClick={() => setIsSignUp(!isSignUp)}
+            onClick={toggleMode}
             className="text-accent font-medium hover:text-accent-hover transition-colors">
             {isSignUp ? 'Sign in' : 'Sign up'}
           </button>
         </div>
       </div>
-    </PageTransition>);
+    </PageTransition>
+  );
 };
