@@ -1,79 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, ArrowRight, Mail, Lock, User, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Activity, ArrowRight, Mail, Lock, User, AlertCircle, Loader } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { PageTransition } from '../components/PageTransition';
 
 export const Login: React.FC = () => {
-  const login = useStore((state) => state.login);
+  const { login, register, authLoading, authError, clearAuthError } = useStore((s) => ({
+    login: s.login,
+    register: s.register,
+    authLoading: s.authLoading,
+    authError: s.authError,
+    clearAuthError: s.clearAuthError,
+  }));
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  // Initialize registered users list in localStorage if it doesn't exist
-  useEffect(() => {
-    const users = localStorage.getItem('muscleiq_users');
-    if (!users) {
-      const defaultUser = [{ email: 'athlete@example.com', password: 'password123', name: 'Athlete' }];
-      localStorage.setItem('muscleiq_users', JSON.stringify(defaultUser));
-    }
-  }, []);
+  const error = localError || authError;
 
-  const getRegisteredUsers = () => {
-    const users = localStorage.getItem('muscleiq_users');
-    if (users) {
-      try {
-        return JSON.parse(users);
-      } catch (e) {
-        return [{ email: 'athlete@example.com', password: 'password123', name: 'Athlete' }];
-      }
-    }
-    return [{ email: 'athlete@example.com', password: 'password123', name: 'Athlete' }];
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setLocalError(null);
+    clearAuthError();
 
-    const users = getRegisteredUsers();
-    const emailLower = email.toLowerCase().trim();
-
-    if (isSignUp) {
-      // Sign Up Flow
-      if (users.some((u: any) => u.email.toLowerCase() === emailLower)) {
-        setError('This email is already registered.');
-        return;
+    try {
+      if (isSignUp) {
+        if (!name.trim()) {
+          setLocalError('Please enter your full name.');
+          return;
+        }
+        await register(name.trim(), email.trim(), password);
+      } else {
+        await login(email.trim(), password);
       }
-
-      const newUser = { name: name.trim(), email: emailLower, password };
-      users.push(newUser);
-      localStorage.setItem('muscleiq_users', JSON.stringify(users));
-
-      // Successfully sign up & log in
-      login(emailLower);
-    } else {
-      // Sign In Flow
-      const matchedUser = users.find((u: any) => u.email.toLowerCase() === emailLower);
-
-      if (!matchedUser) {
-        setError('Incorrect email address or user not found.');
-        return;
-      }
-
-      if (matchedUser.password !== password) {
-        setError('Incorrect password. Please try again.');
-        return;
-      }
-
-      // Success! Log in
-      login(emailLower);
+      // On success, App.tsx will auto-redirect via isLoggedIn state
+    } catch (err: any) {
+      // Error is already set in the store by the action
     }
   };
 
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
-    setError(null);
+    setLocalError(null);
+    clearAuthError();
     setEmail('');
     setPassword('');
     setName('');
@@ -82,7 +53,7 @@ export const Login: React.FC = () => {
   return (
     <PageTransition className="flex flex-col h-full bg-dark">
       <div className="flex-1 flex flex-col justify-center px-8 relative z-10">
-        {/* Background glow effect */}
+        {/* Background glow */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 bg-accent/20 rounded-full blur-[100px] -z-10" />
 
         <div className="mb-8 text-center">
@@ -99,9 +70,9 @@ export const Login: React.FC = () => {
           </p>
         </div>
 
-        {/* Error Alert Box */}
+        {/* Error Alert */}
         {error && (
-          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-3.5 text-sm mb-6 animate-pulse">
+          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-3.5 text-sm mb-6">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span className="font-medium text-left">{error}</span>
           </div>
@@ -118,8 +89,10 @@ export const Login: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="John Doe"
-                  className="w-full bg-dark-200 border border-dark-300 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
-                  required />
+                  disabled={authLoading}
+                  className="w-full bg-dark-200 border border-dark-300 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
+                  required
+                />
               </div>
             </div>
           )}
@@ -133,8 +106,10 @@ export const Login: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="athlete@example.com"
-                className="w-full bg-dark-200 border border-dark-300 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
-                required />
+                disabled={authLoading}
+                className="w-full bg-dark-200 border border-dark-300 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
+                required
+              />
             </div>
           </div>
 
@@ -147,16 +122,17 @@ export const Login: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-dark-200 border border-dark-300 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
-                required />
+                disabled={authLoading}
+                className="w-full bg-dark-200 border border-dark-300 rounded-xl py-3 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
+                required
+                minLength={6}
+              />
             </div>
           </div>
 
           {!isSignUp && (
             <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                className="text-sm text-accent hover:text-accent-hover transition-colors">
+              <button type="button" className="text-sm text-accent hover:text-accent-hover transition-colors">
                 Forgot password?
               </button>
             </div>
@@ -164,9 +140,19 @@ export const Login: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full bg-accent hover:bg-accent-hover text-white font-semibold rounded-xl py-3.5 mt-4 flex items-center justify-center gap-2 transition-all shadow-glow active:scale-[0.98]">
-            {isSignUp ? 'Create Account' : 'Sign In'}
-            <ArrowRight className="w-5 h-5" />
+            disabled={authLoading}
+            className="w-full bg-accent hover:bg-accent-hover text-white font-semibold rounded-xl py-3.5 mt-4 flex items-center justify-center gap-2 transition-all shadow-glow active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
+            {authLoading ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                {isSignUp ? 'Creating Account…' : 'Signing In…'}
+              </>
+            ) : (
+              <>
+                {isSignUp ? 'Create Account' : 'Sign In'}
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
           </button>
         </form>
 
@@ -175,7 +161,8 @@ export const Login: React.FC = () => {
           <button
             type="button"
             onClick={toggleMode}
-            className="text-accent font-medium hover:text-accent-hover transition-colors">
+            disabled={authLoading}
+            className="text-accent font-medium hover:text-accent-hover transition-colors disabled:opacity-50">
             {isSignUp ? 'Sign in' : 'Sign up'}
           </button>
         </div>

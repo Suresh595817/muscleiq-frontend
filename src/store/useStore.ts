@@ -1,21 +1,35 @@
 import { create } from 'zustand';
+import {
+  authApi,
+  workoutApi,
+  analyticsApi,
+  exerciseApi,
+  clearToken,
+  getToken,
+  ApiUser,
+  ApiWorkout,
+  ApiExercise,
+  ApiImbalanceReport,
+  ApiDashboardStats,
+} from '../services/api';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 export type MuscleGroup =
-'Chest' |
-'Upper Back' |
-'Lats' |
-'Front Delts' |
-'Side Delts' |
-'Rear Delts' |
-'Biceps' |
-'Triceps' |
-'Forearms' |
-'Abs' |
-'Obliques' |
-'Quads' |
-'Hamstrings' |
-'Glutes' |
-'Calves';
+  | 'Chest'
+  | 'Upper Back'
+  | 'Lats'
+  | 'Front Delts'
+  | 'Side Delts'
+  | 'Rear Delts'
+  | 'Biceps'
+  | 'Triceps'
+  | 'Forearms'
+  | 'Abs'
+  | 'Obliques'
+  | 'Quads'
+  | 'Hamstrings'
+  | 'Glutes'
+  | 'Calves';
 
 export interface Exercise {
   id: string;
@@ -38,225 +52,255 @@ export interface Workout {
   id: string;
   date: string;
   name: string;
-  duration: number; // minutes
+  duration: number;
   exercises: WorkoutExercise[];
 }
 
+// ─── App State ────────────────────────────────────────────────────────────────
 interface AppState {
+  // Auth
   isLoggedIn: boolean;
-  user: {name: string;memberSince: string;} | null;
-  exercises: Exercise[];
+  user: ApiUser | null;
+  authLoading: boolean;
+  authError: string | null;
+
+  // Workouts
   workouts: Workout[];
-  login: (email: string) => void;
+  workoutsLoading: boolean;
+  workoutsError: string | null;
+
+  // Exercises
+  exercises: Exercise[];
+  exercisesLoading: boolean;
+
+  // Analytics
+  imbalanceReport: ApiImbalanceReport | null;
+  dashboardStats: ApiDashboardStats | null;
+  analyticsLoading: boolean;
+  analyticsError: string | null;
+
+  // Actions - Auth
+  register: (name: string, email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  addWorkout: (workout: Omit<Workout, 'id'>) => void;
-  getMuscleScore: (
-  muscle: MuscleGroup)
-  => {
+  checkAuth: () => Promise<void>;
+
+  // Actions - Workouts
+  loadWorkouts: () => Promise<void>;
+  addWorkout: (payload: {
+    name: string;
+    duration: number;
+    notes?: string;
+    exercises: Array<{
+      exerciseName: string;
+      primaryMuscle: string;
+      sets: Array<{ reps: number; weight: number }>;
+    }>;
+  }) => Promise<void>;
+  deleteWorkout: (id: string) => Promise<void>;
+
+  // Actions - Exercises
+  loadExercises: () => Promise<void>;
+
+  // Actions - Analytics
+  loadAnalytics: () => Promise<void>;
+
+  // Helpers
+  getMuscleScore: (muscle: MuscleGroup) => {
     score: number;
     status: 'balanced' | 'undertrained' | 'neglected' | 'overtrained';
   };
+  clearAuthError: () => void;
 }
 
-const MOCK_EXERCISES: Exercise[] = [
-{
-  id: 'e1',
-  name: 'Bench Press',
-  primaryMuscles: ['Chest', 'Front Delts'],
-  secondaryMuscles: ['Triceps']
-},
-{
-  id: 'e2',
-  name: 'Pull-ups',
-  primaryMuscles: ['Lats', 'Upper Back'],
-  secondaryMuscles: ['Biceps', 'Forearms']
-},
-{
-  id: 'e3',
-  name: 'Squats',
-  primaryMuscles: ['Quads', 'Glutes'],
-  secondaryMuscles: ['Hamstrings', 'Abs']
-},
-{
-  id: 'e4',
-  name: 'Deadlifts',
-  primaryMuscles: ['Hamstrings', 'Glutes', 'Upper Back'],
-  secondaryMuscles: ['Lats', 'Forearms', 'Abs']
-},
-{
-  id: 'e5',
-  name: 'Overhead Press',
-  primaryMuscles: ['Front Delts', 'Side Delts'],
-  secondaryMuscles: ['Triceps', 'Upper Back']
-},
-{
-  id: 'e6',
-  name: 'Barbell Curls',
-  primaryMuscles: ['Biceps'],
-  secondaryMuscles: ['Forearms']
-},
-{
-  id: 'e7',
-  name: 'Tricep Extensions',
-  primaryMuscles: ['Triceps'],
-  secondaryMuscles: []
-},
-{
-  id: 'e8',
-  name: 'Calf Raises',
-  primaryMuscles: ['Calves'],
-  secondaryMuscles: []
-},
-{
-  id: 'e9',
-  name: 'Crunches',
-  primaryMuscles: ['Abs'],
-  secondaryMuscles: ['Obliques']
-},
-{
-  id: 'e10',
-  name: 'Lateral Raises',
-  primaryMuscles: ['Side Delts'],
-  secondaryMuscles: []
-},
-{
-  id: 'e11',
-  name: 'Face Pulls',
-  primaryMuscles: ['Rear Delts', 'Upper Back'],
-  secondaryMuscles: []
-}];
+// ─── Helper: Map ApiWorkout to local Workout ──────────────────────────────────
+function mapApiWorkout(w: ApiWorkout): Workout {
+  return {
+    id: w.id,
+    date: w.date,
+    name: w.name,
+    duration: w.duration,
+    exercises: (w.workout_exercises || []).map((we) => ({
+      exerciseId: we.exercise_id,
+      sets: (we.workout_sets || []).map((s) => ({ reps: s.reps, weight: s.weight })),
+    })),
+  };
+}
 
+// ─── Helper: Map ApiExercise to local Exercise ────────────────────────────────
+function mapApiExercise(e: ApiExercise): Exercise {
+  return {
+    id: e.id,
+    name: e.name,
+    primaryMuscles: [e.primary_muscle as MuscleGroup].filter(Boolean),
+    secondaryMuscles: (e.secondary_muscles || []) as MuscleGroup[],
+  };
+}
 
-const MOCK_WORKOUTS: Workout[] = [
-{
-  id: 'w1',
-  date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(), // 1 day ago
-  name: 'Push Day',
-  duration: 55,
-  exercises: [
-  {
-    exerciseId: 'e1',
-    sets: [
-    { reps: 8, weight: 135 },
-    { reps: 8, weight: 135 },
-    { reps: 6, weight: 145 }]
-
-  },
-  {
-    exerciseId: 'e5',
-    sets: [
-    { reps: 10, weight: 95 },
-    { reps: 10, weight: 95 }]
-
-  },
-  {
-    exerciseId: 'e7',
-    sets: [
-    { reps: 12, weight: 40 },
-    { reps: 12, weight: 40 }]
-
-  }]
-
-},
-{
-  id: 'w2',
-  date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days ago
-  name: 'Pull Day',
-  duration: 60,
-  exercises: [
-  {
-    exerciseId: 'e2',
-    sets: [
-    { reps: 10, weight: 0 },
-    { reps: 8, weight: 0 }]
-
-  },
-  {
-    exerciseId: 'e6',
-    sets: [
-    { reps: 12, weight: 60 },
-    { reps: 12, weight: 60 }]
-
-  }]
-
-},
-{
-  id: 'w3',
-  date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days ago
-  name: 'Leg Day',
-  duration: 45,
-  exercises: [
-  {
-    exerciseId: 'e3',
-    sets: [
-    { reps: 8, weight: 225 },
-    { reps: 8, weight: 225 }]
-
-  },
-  {
-    exerciseId: 'e8',
-    sets: [
-    { reps: 15, weight: 100 },
-    { reps: 15, weight: 100 }]
-
-  }]
-
-}];
-
-
+// ─── Store ────────────────────────────────────────────────────────────────────
 export const useStore = create<AppState>((set, get) => ({
+  // ── Initial State ────────────────────────────────────────────────────────────
   isLoggedIn: false,
   user: null,
-  exercises: MOCK_EXERCISES,
-  workouts: MOCK_WORKOUTS,
+  authLoading: false,
+  authError: null,
 
-  login: (email) =>
-  set({
-    isLoggedIn: true,
-    user: { name: email.split('@')[0] || 'Athlete', memberSince: '2024' }
-  }),
+  workouts: [],
+  workoutsLoading: false,
+  workoutsError: null,
 
-  logout: () => set({ isLoggedIn: false, user: null }),
+  exercises: [],
+  exercisesLoading: false,
 
-  addWorkout: (workout) =>
-  set((state) => ({
-    workouts: [{ ...workout, id: `w${Date.now()}` }, ...state.workouts]
-  })),
+  imbalanceReport: null,
+  dashboardStats: null,
+  analyticsLoading: false,
+  analyticsError: null,
 
+  // ── Auth Actions ─────────────────────────────────────────────────────────────
+  register: async (name, email, password) => {
+    set({ authLoading: true, authError: null });
+    try {
+      const user = await authApi.register(name, email, password);
+      set({ isLoggedIn: true, user, authLoading: false });
+      // Load data after successful auth
+      get().loadWorkouts();
+      get().loadExercises();
+      get().loadAnalytics();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message || err?.message || 'Registration failed. Try again.';
+      set({ authLoading: false, authError: msg });
+      throw new Error(msg);
+    }
+  },
+
+  login: async (email, password) => {
+    set({ authLoading: true, authError: null });
+    try {
+      const user = await authApi.login(email, password);
+      set({ isLoggedIn: true, user, authLoading: false });
+      get().loadWorkouts();
+      get().loadExercises();
+      get().loadAnalytics();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message || err?.message || 'Login failed. Check your credentials.';
+      set({ authLoading: false, authError: msg });
+      throw new Error(msg);
+    }
+  },
+
+  logout: () => {
+    clearToken();
+    set({
+      isLoggedIn: false,
+      user: null,
+      workouts: [],
+      imbalanceReport: null,
+      dashboardStats: null,
+      authError: null,
+    });
+  },
+
+  checkAuth: async () => {
+    if (!getToken()) return;
+    try {
+      const user = await authApi.getMe();
+      if (user) {
+        set({ isLoggedIn: true, user });
+        get().loadWorkouts();
+        get().loadExercises();
+        get().loadAnalytics();
+      } else {
+        clearToken();
+      }
+    } catch {
+      clearToken();
+    }
+  },
+
+  clearAuthError: () => set({ authError: null }),
+
+  // ── Workout Actions ───────────────────────────────────────────────────────────
+  loadWorkouts: async () => {
+    set({ workoutsLoading: true, workoutsError: null });
+    try {
+      const data = await workoutApi.getWorkouts();
+      set({ workouts: data.map(mapApiWorkout), workoutsLoading: false });
+    } catch (err: any) {
+      set({
+        workoutsLoading: false,
+        workoutsError: err?.response?.data?.message || 'Failed to load workouts.',
+      });
+    }
+  },
+
+  addWorkout: async (payload) => {
+    set({ workoutsLoading: true, workoutsError: null });
+    try {
+      await workoutApi.addWorkout(payload);
+      // Reload workouts and analytics after adding
+      get().loadWorkouts();
+      get().loadAnalytics();
+      set({ workoutsLoading: false });
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Failed to log workout.';
+      set({ workoutsLoading: false, workoutsError: msg });
+      throw new Error(msg);
+    }
+  },
+
+  deleteWorkout: async (id) => {
+    try {
+      await workoutApi.deleteWorkout(id);
+      set((state) => ({ workouts: state.workouts.filter((w) => w.id !== id) }));
+      get().loadAnalytics();
+    } catch (err: any) {
+      set({ workoutsError: err?.response?.data?.message || 'Failed to delete workout.' });
+    }
+  },
+
+  // ── Exercise Actions ─────────────────────────────────────────────────────────
+  loadExercises: async () => {
+    set({ exercisesLoading: true });
+    try {
+      const data = await exerciseApi.getExercises();
+      set({ exercises: data.map(mapApiExercise), exercisesLoading: false });
+    } catch {
+      set({ exercisesLoading: false });
+    }
+  },
+
+  // ── Analytics Actions ─────────────────────────────────────────────────────────
+  loadAnalytics: async () => {
+    set({ analyticsLoading: true, analyticsError: null });
+    try {
+      const [imbalanceReport, dashboardStats] = await Promise.all([
+        analyticsApi.getImbalance(),
+        analyticsApi.getDashboard(),
+      ]);
+      set({ imbalanceReport, dashboardStats, analyticsLoading: false });
+    } catch (err: any) {
+      set({
+        analyticsLoading: false,
+        analyticsError: err?.response?.data?.message || 'Failed to load analytics.',
+      });
+    }
+  },
+
+  // ── Helper ────────────────────────────────────────────────────────────────────
   getMuscleScore: (muscle) => {
-    // Mock logic to calculate muscle score based on recent workouts
-    // In a real app, this would be a complex algorithm based on volume, frequency, and recovery
+    const { imbalanceReport } = get();
+    const heatmap = imbalanceReport?.muscleHeatmap || {};
+    const score = heatmap[muscle] ?? 50;
 
-    // Hardcoded mock scores for demonstration to show different colors
-    const mockScores: Record<string, number> = {
-      Chest: 85, // Balanced
-      'Front Delts': 90, // Balanced
-      Triceps: 75, // Balanced
-      Lats: 45, // Undertrained
-      'Upper Back': 50, // Undertrained
-      Biceps: 60, // Undertrained
-      Quads: 80, // Balanced
-      Hamstrings: 30, // Neglected
-      Glutes: 40, // Neglected
-      Calves: 20, // Neglected
-      Abs: 15, // Neglected
-      'Side Delts': 65, // Undertrained
-      'Rear Delts': 25, // Neglected
-      Forearms: 55, // Undertrained
-      Obliques: 10 // Neglected
-    };
-
-    const score = mockScores[muscle] || 50;
-
-    let status: 'balanced' | 'undertrained' | 'neglected' | 'overtrained' =
-    'balanced';
-    if (score >= 70) status = 'balanced';else
-    if (score >= 45) status = 'undertrained';else
-    status = 'neglected';
-
-    // Just for demo, let's make chest overtrained if score > 95
+    let status: 'balanced' | 'undertrained' | 'neglected' | 'overtrained' = 'balanced';
+    if (score >= 70) status = 'balanced';
+    else if (score >= 45) status = 'undertrained';
+    else status = 'neglected';
     if (score > 95) status = 'overtrained';
 
     return { score, status };
-  }
+  },
 }));

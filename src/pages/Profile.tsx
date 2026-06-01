@@ -3,7 +3,7 @@ import { User, Settings, LogOut, Award, Target, Zap } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { PageTransition } from '../components/PageTransition';
 export const Profile: React.FC = () => {
-  const { user, logout, workouts } = useStore();
+  const { user, logout, workouts, dashboardStats } = useStore();
   return (
     <PageTransition className="p-6 pb-24">
       <div className="flex items-center justify-between mb-8">
@@ -21,10 +21,9 @@ export const Profile: React.FC = () => {
             <Award className="w-3 h-3 text-white" />
           </div>
         </div>
-        <h2 className="text-xl font-bold">{user?.name}</h2>
-        <p className="text-sm text-gray-400">
-          Pro Member since {user?.memberSince}
-        </p>
+        <h2 className="text-xl font-bold">{user?.name ?? 'Athlete'}</h2>
+        <p className="text-sm text-gray-400">{user?.email}</p>
+        <span className="mt-1 text-xs bg-accent/20 text-accent px-3 py-0.5 rounded-full capitalize">{user?.role ?? 'user'}</span>
       </div>
 
       {/* Stats Grid */}
@@ -34,7 +33,7 @@ export const Profile: React.FC = () => {
             <Zap className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xl font-bold">{workouts.length}</div>
+            <div className="text-xl font-bold">{dashboardStats?.totalWorkouts ?? workouts.length}</div>
             <div className="text-xs text-gray-400">Total Workouts</div>
           </div>
         </div>
@@ -44,11 +43,14 @@ export const Profile: React.FC = () => {
             <Target className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xl font-bold">Chest</div>
-            <div className="text-xs text-gray-400">Top Muscle</div>
+            <div className="text-xl font-bold text-sm leading-tight">
+              {dashboardStats?.favoriteExercise ?? '—'}
+            </div>
+            <div className="text-xs text-gray-400">Top Exercise</div>
           </div>
         </div>
       </div>
+
 
       {/* Menu Items */}
       <div className="space-y-2 mb-8">
