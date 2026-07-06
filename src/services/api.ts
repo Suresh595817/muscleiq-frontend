@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // ─── Base URL ────────────────────────────────────────────────────────────────
 // In dev, backend runs on localhost:5000. In production, set VITE_API_URL on Netlify.
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://muscleiq-backend.onrender.com/api/v1';
 
 // ─── Token Management ─────────────────────────────────────────────────────────
 export const saveToken = (token: string) => localStorage.setItem('muscleiq_token', token);
