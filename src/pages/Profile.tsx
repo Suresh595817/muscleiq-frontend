@@ -2,7 +2,9 @@ import React from 'react';
 import { User, Settings, LogOut, Award, Target, Zap } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { PageTransition } from '../components/PageTransition';
+import { useNavigate } from 'react-router-dom';
 export const Profile: React.FC = () => {
+  const navigate = useNavigate();
   const { user, logout, workouts, dashboardStats } = useStore();
   return (
     <PageTransition className="p-6 pb-24">
@@ -55,19 +57,19 @@ export const Profile: React.FC = () => {
       {/* Menu Items */}
       <div className="space-y-2 mb-8">
         {[
-        'Account Settings',
-        'Notifications',
-        'Subscription',
-        'Help & Support'].
-        map((item) =>
-        <button
-          key={item}
-          className="w-full flex items-center justify-between p-4 bg-dark-200 border border-dark-300 rounded-xl hover:bg-dark-300 transition-colors">
-          
-            <span className="font-medium">{item}</span>
+          { name: 'Account Settings', path: '/settings' },
+          { name: 'Notifications', path: '/notifications' },
+          { name: 'Subscription', path: '/subscription' },
+          { name: 'Help & Support', path: '/support' }
+        ].map((item) => (
+          <button
+            key={item.name}
+            onClick={() => navigate(item.path)}
+            className="w-full flex items-center justify-between p-4 bg-dark-200 border border-dark-300 rounded-xl hover:bg-dark-300 transition-colors">
+            <span className="font-medium">{item.name}</span>
             <span className="text-gray-500">→</span>
           </button>
-        )}
+        ))}
       </div>
 
       {/* Logout */}
